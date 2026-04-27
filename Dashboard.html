@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Employee Analytics</title>
+    
+    <!-- External Libraries -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Specific version for stability -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0/dist/chartjs-plugin-datalabels.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        :root {
+            --primary-color: #4f46e5;
+            --secondary-color: #818cf8;
+            --bg-color: #f8fafc;
+            --card-bg: #ffffff;
+            --text-color: #1e293b;
+            --text-muted: #64748b;
+            --border-color: #e2e8f0;
+            --kpi-blue: #3b82f6;
+            --kpi-green: #10b981;
+            --kpi-red: #ef4444;
+            --kpi-orange: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-color); color: var(--text-color); display: flex; min-height: 100vh; }
+
+        .sidebar {
+            width: 250px; background-color: #0f172a; color: white; display: flex; flex-direction: column;
+            padding: 24px; position: fixed; height: 100%; z-index: 1000; box-shadow: 4px 0 10px rgba(0,0,0,0.05);
+        }
+        .logo { font-size: 1.4rem; font-weight: 700; margin-bottom: 40px; display: flex; align-items: center; gap: 10px; color: white; }
+        
+        .nav-link {
+            display: flex; align-items: center; gap: 12px; padding: 12px 16px; color: #94a3b8; text-decoration: none;
+            border-radius: 8px; transition: all 0.2s; cursor: pointer; margin-bottom: 4px; font-weight: 500;
+        }
+        .nav-link:hover { background-color: rgba(255,255,255,0.05); color: white; }
+        .nav-link.active { background-color: var(--primary-color); color: white; box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2); }
+
+        .main-content { margin-left: 250px; flex: 1; padding: 30px; width: calc(100% - 250px); }
+        
+        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; }
+        .header-title h1 { font-size: 1.8rem; font-weight: 700; color: #1e293b; }
+        .header-title p { color: var(--text-muted); font-size: 0.9rem; }
+        
+        .btn {
+            padding: 10px 20px; border-radius: 8px; border: none; cursor: pointer; font-weight: 600;
+            display: flex; align-items: center; gap: 8px; transition: all 0.2s; font-size: 0.9rem; box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-primary:hover { background-color: #4338ca; transform: translateY(-1px); }
+        .btn-danger { background-color: var(--kpi-red); color: white; display: none; }
+        input[type="file"] { display: none; }
+
+        /* Filter Status */
+        #filterStatusBar {
+            background-color: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 12px 20px;
+            margin-bottom: 25px; display: none; align-items: center; justify-content: space-between; animation: slideDown 0.3s;
+        }
+        #filterStatusBar.active { display: flex; }
+        .filter-text { font-weight: 600; color: #1e40af; font-size: 0.95rem; }
+        .filter-text span { color: #60a5fa; font-weight: 400; margin-left: 5px; }
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .content-section { display: none; animation: fadeIn 0.3s ease-out; }
+        .content-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .kpi-card {
+            background: var(--card-bg); padding: 24px; border-radius: 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            display: flex; flex-direction: column; justify-content: space-between; position: relative; overflow: hidden; border: 1px solid var(--border-color);
+        }
+        .kpi-info h3 { font-size: 0.8rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+        .kpi-info p { font-size: 2rem; font-weight: 700; color: var(--text-color); line-height: 1; }
+        .kpi-icon { position: absolute; right: -15px; bottom: -15px; font-size: 6rem; opacity: 0.05; transform: rotate(-15deg); pointer-events: none; }
+        .kpi-blue { border-left: 5px solid var(--kpi-blue); } .kpi-blue .kpi-icon { color: var(--kpi-blue); }
+        .kpi-green { border-left: 5px solid var(--kpi-green); } .kpi-green .kpi-icon { color: var(--kpi-green); }
+        .kpi-red { border-left: 5px solid var(--kpi-red); } .kpi-red .kpi-icon { color: var(--kpi-red); }
+        .kpi-orange { border-left: 5px solid var(--kpi-orange); } .kpi-orange .kpi-icon { color: var(--kpi-orange); }
+
+        .charts-container { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 30px; }
+        .full-width { grid-column: span 2; }
+        .chart-card {
+            background: var(--card-bg); padding: 20px; border-radius: 12px; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+            border: 1px solid var(--border-color); height: 380px; display: flex; flex-direction: column; position: relative;
+        }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; border-bottom: 1px solid #f1f5f9; padding-bottom: 10px; flex-shrink: 0; }
+        .chart-header h3 { font-size: 1rem; font-weight: 600; color: #334155; }
+        .chart-hint { font-size: 0.75rem; color: var(--text-muted); font-style: italic; }
+        
+        /* Ensure canvas container takes remaining height */
+        .canvas-wrapper { flex: 1; position: relative; width: 100%; min-height: 0; }
+
+        .table-container { background: var(--card-bg); border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid var(--border-color); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 0.9rem; }
+        th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid #f1f5f9; }
+        th { background-color: #f8fafc; font-weight: 600; color: var(--text-muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 600; text-transform: uppercase; }
+        .status-active { background-color: #dcfce7; color: #166534; }
+        .status-left { background-color: #fee2e2; color: #991b1b; }
+
+        .toast { position: fixed; bottom: 20px; right: 20px; background: #1e293b; color: white; padding: 12px 24px; border-radius: 8px; transform: translateY(100px); transition: transform 0.3s); z-index: 2000; font-weight: 500; box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
+        .toast.show { transform: translateY(0); }
+        .toast.success { background-color: var(--kpi-green); }
+        .toast.info { background-color: var(--primary-color); }
+
+        @media (max-width: 1024px) { .charts-container { grid-template-columns: 1fr; } .full-width { grid-column: span 1; } }
+        @media (max-width: 768px) { .sidebar { transform: translateX(-100%); } .main-content { margin-left: 0; width: 100%; padding: 15px; } }
+    </style>
+</head>
+<body>
+
+    <nav class="sidebar" id="sidebar">
+        <div class="logo"><i class="fa-solid fa-chart-pie" style="color: var(--primary-color);"></i> HR Vision</div>
+        <a href="#" class="nav-link active" data-target="overview"><i class="fa-solid fa-house"></i> Overview</a>
+        <a href="#" class="nav-link" data-target="employees"><i class="fa-solid fa-users"></i> Employees</a>
+        <a href="#" class="nav-link" data-target="finance"><i class="fa-solid fa-money-bill-trend-up"></i> Finance</a>
+        <a href="#" class="nav-link" data-target="settings"><i class="fa-solid fa-gear"></i> Settings</a>
+    </nav>
+
+    <main class="main-content">
+        <header>
+            <div class="header-title">
+                <h1 id="pageTitle">Overview</h1>
+                <p>Upload data or interact with charts to analyze.</p>
+            </div>
+            <div class="header-actions">
+                <label for="excelUpload" class="btn btn-primary">
+                    <i class="fa-solid fa-cloud-arrow-up"></i> Upload Excel
+                </label>
+                <input type="file" id="excelUpload" accept=".xlsx, .xls, .csv">
+            </div>
+        </header>
+
+        <div id="filterStatusBar">
+            <div class="filter-text" id="filterMessage">
+                <i class="fa-solid fa-filter"></i> Filtering by: <span id="filterValueText">Department</span>
+            </div>
+            <button class="btn btn-danger" id="resetFilterBtn" onclick="resetFilters()">
+                <i class="fa-solid fa-xmark"></i> Reset Filter
+            </button>
+        </div>
+
+        <section id="overview" class="content-section active">
+            <div class="kpi-grid">
+                <div class="kpi-card kpi-blue">
+                    <div class="kpi-info"><h3>Total Employees</h3><p id="kpiTotalEmp">0</p></div>
+                    <i class="fa-solid fa-users kpi-icon"></i>
+                </div>
+                <div class="kpi-card kpi-green">
+                    <div class="kpi-info"><h3>Avg. Income</h3><p id="kpiAvgIncome">$0</p></div>
+                    <i class="fa-solid fa-sack-dollar kpi-icon"></i>
+                </div>
+                <div class="kpi-card kpi-red">
+                    <div class="kpi-info"><h3>Attrition Rate</h3><p id="kpiAttrition">0%</p></div>
+                    <i class="fa-solid fa-user-xmark kpi-icon"></i>
+                </div>
+                <div class="kpi-card kpi-orange">
+                    <div class="kpi-info"><h3>Avg. Age</h3><p id="kpiAvgAge">0</p></div>
+                    <i class="fa-solid fa-cake-candles kpi-icon"></i>
+                </div>
+            </div>
+
+            <div class="charts-container">
+                <div class="chart-card">
+                    <div class="chart-header"><h3>Headcount by Dept</h3><span class="chart-hint"><i class="fa-solid fa-computer-mouse"></i> Click bar</span></div>
+                    <div class="canvas-wrapper"><canvas id="barChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header"><h3>Gender Diversity</h3><span class="chart-hint"><i class="fa-solid fa-computer-mouse"></i> Click slice</span></div>
+                    <div class="canvas-wrapper" style="display:flex; justify-content:center;"><canvas id="pieChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header"><h3>Age Distribution</h3><span class="chart-hint"><i class="fa-solid fa-computer-mouse"></i> Click bar</span></div>
+                    <div class="canvas-wrapper"><canvas id="histogramChart"></canvas></div>
+                </div>
+                <div class="chart-card">
+                    <div class="chart-header"><h3>Hiring vs Exit Trends</h3></div>
+                    <div class="canvas-wrapper"><canvas id="lineChart"></canvas></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="employees" class="content-section">
+            <div class="table-container">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                    <h3>Employee Directory</h3>
+                    <input type="text" id="searchInput" placeholder="Search..." style="padding: 8px; border: 1px solid var(--border-color); border-radius: 6px;">
+                </div>
+                <table id="employeeTable">
+                    <thead>
+                        <tr>
+                            <th>Emp ID</th><th>Age</th><th>Department</th><th>Job Role</th><th>Gender</th><th>Income</th><th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="empTableBody"><tr><td colspan="7" style="text-align:center;">Upload data to view records.</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <section id="finance" class="content-section">
+            <div class="charts-container">
+                <div class="chart-card full-width">
+                    <div class="chart-header"><h3>Average Salary by Job Role</h3></div>
+                    <div class="canvas-wrapper"><canvas id="financeChart"></canvas></div>
+                </div>
+            </div>
+        </section>
+
+        <section id="settings" class="content-section">
+            <div style="background: white; padding: 20px; border-radius: 12px;"><h3>Settings</h3><p style="color:var(--text-muted);">Configuration options would go here.</p></div>
+        </section>
+    </main>
+
+    <div id="toast" class="toast">Message</div>
+
+    <script>
+        Chart.register(ChartDataLabels);
+
+        let globalData = [];
+        let charts = {};
+        let currentFilter = { active: false, type: null, value: null };
+
+        // --- Navigation ---
+        const navLinks = document.querySelectorAll('.nav-link');
+        const sections = document.querySelectorAll('.content-section');
+        const pageTitle = document.getElementById('pageTitle');
+
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                navLinks.forEach(l => l.classList.remove('active'));
+                link.classList.add('active');
+                sections.forEach(s => s.classList.remove('active'));
+                document.getElementById(link.getAttribute('data-target')).classList.add('active');
+                pageTitle.textContent = link.textContent.trim();
+            });
+        });
+
+        function showToast(msg, type = 'success') {
+            const toast = document.getElementById('toast');
+            toast.textContent = msg;
+            toast.className = `toast ${type} show`;
+            setTimeout(() => toast.className = 'toast', 3000);
+        }
+
+        function formatCurrency(num) {
+            return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(num);
+        }
+
+        // --- Logic ---
+        function processData(data) {
+            if (!data || data.length === 0) return;
+            globalData = data;
+            resetFilters(false);
+            updateDashboard();
+            showToast("Dashboard loaded with " + data.length + " records.");
+        }
+
+        function applyFilter(type, value) {
+            currentFilter = { active: true, type, value };
+            document.getElementById('filterStatusBar').classList.add('active');
+            document.getElementById('filterValueText').textContent = `${type}: ${value}`;
+            document.getElementById('resetFilterBtn').style.display = 'flex';
+            showToast(`Filtered by ${type}: ${value}`, 'info');
+            updateDashboard();
+        }
+
+        function resetFilters(showMsg = true) {
+            currentFilter = { active: false, type: null, value: null };
+            document.getElementById('filterStatusBar').classList.remove('active');
+            document.getElementById('resetFilterBtn').style.display = 'none';
+            if(showMsg) {
+                showToast("Filters cleared", 'info');
+                updateDashboard();
+            }
+        }
+
+        function getFilteredData() {
+            if (!currentFilter.active) return globalData;
+            return globalData.filter(row => {
+                if (currentFilter.type === 'Department') return row.Department === currentFilter.value;
+                if (currentFilter.type === 'Gender') return row.Gender === currentFilter.value;
+                if (currentFilter.type === 'AgeRange') {
+                    const age = parseFloat(row.Age);
+                    const range = currentFilter.value; 
+                    const [min, max] = range.split('-').map(Number);
+                    if(range.includes('+')) return age >= 60;
+                    return age >= min && age <= max;
+                }
+                return true;
+            });
+        }
+
+        function updateDashboard() {
+            const dataToUse = getFilteredData();
+            updateKPIs(dataToUse);
+            renderCharts(dataToUse);
+            renderEmployeeTable(dataToUse);
+        }
+
+        function updateKPIs(data) {
+            document.getElementById('kpiTotalEmp').textContent = data.length;
+            const totalIncome = data.reduce((sum, row) => sum + (parseFloat(row.MonthlyIncome) || 0), 0);
+            document.getElementById('kpiAvgIncome').textContent = formatCurrency(data.length ? totalIncome / data.length : 0);
+            const attritionCount = data.filter(row => ['yes','1','true'].includes(String(row.Attrition).toLowerCase())).length;
+            document.getElementById('kpiAttrition').textContent = data.length ? ((attritionCount / data.length) * 100).toFixed(1) + '%' : 0;
+            const totalAge = data.reduce((sum, row) => sum + (parseFloat(row.Age) || 0), 0);
+            document.getElementById('kpiAvgAge').textContent = data.length ? (totalAge / data.length).toFixed(1) : 0;
+        }
+
+        function renderCharts(data) {
+            // --- Shared Base Options ---
+            const baseOptions = {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    tooltip: { backgroundColor: '#1e293b', titleFont: { size: 13 }, bodyFont: { size: 13 }, padding: 10, cornerRadius: 6 }
+                }
+            };
+
+            const scalesCommon = {
+                x: { grid: { display: false }, ticks: { font: { size: 11 } } },
+                y: { grid: { borderDash: [4, 4], color: '#e2e8f0' }, ticks: { font: { size: 11 } } }
+            };
+
+            // 1. BAR CHART (Horizontal - Department)
+            const ctxBar = document.getElementById('barChart').getContext('2d');
+            const deptCounts = {};
+            data.forEach(r => { deptCounts[r.Department || 'Unknown'] = (deptCounts[r.Department] || 0) + 1; });
+            
+            if(charts.bar) charts.bar.destroy();
+            charts.bar = new Chart(ctxBar, {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(deptCounts),
+                    datasets: [{ 
+                        label: 'Count', 
+                        data: Object.values(deptCounts), 
+                        backgroundColor: '#4f46e5', borderRadius: 4,
+                        datalabels: { color: '#1e293b', anchor: 'end', align: 'end' }
+                    }]
+                },
+                options: { 
+                    ...baseOptions, 
+                    indexAxis: 'y',
+                    layout: { padding: { right: 30, top: 10, bottom: 10 } }, // Extra padding on right for labels
+                    scales: scalesCommon,
+                    plugins: {
+                        ...baseOptions.plugins,
+                        // SPECIFIC HORIZONTAL LABEL CONFIG
+                        datalabels: {
+                            color: '#1e293b',
+                            font: { weight: 'bold', size: 11 },
+                            anchor: 'end',      // At the end of the bar (right side)
+                            align: 'center',    // Centered vertically on the bar
+                            offset: 4           // Slight gap
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if(elements.length > 0) {
+                            const label = Object.keys(deptCounts)[elements[0].index];
+                            if(currentFilter.active && currentFilter.type === 'Department' && currentFilter.value === label) resetFilters();
+                            else applyFilter('Department', label);
+                        }
+                    }
+                }
+            });
+
+            // 2. PIE CHART
+            const ctxPie = document.getElementById('pieChart').getContext('2d');
+            const genderCounts = {};
+            data.forEach(r => { genderCounts[r.Gender || 'Unknown'] = (genderCounts[r.Gender] || 0) + 1; });
+
+            if(charts.pie) charts.pie.destroy();
+            charts.pie = new Chart(ctxPie, {
+                type: 'doughnut',
+                data: { labels: Object.keys(genderCounts), datasets: [{ data: Object.values(genderCounts), backgroundColor: ['#ec4899', '#3b82f6', '#94a3b8'], borderWidth: 2, borderColor: '#ffffff' }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false, cutout: '65%',
+                    plugins: {
+                        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
+                        datalabels: {
+                            color: 'white', font: { weight: 'bold' },
+                            formatter: (value, ctx) => {
+                                let sum = ctx.chart.data.datasets[0].data.reduce((a, b) => a + b, 0);
+                                return Math.round((value*100 / sum)) + "%";
+                            }
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if(elements.length > 0) {
+                            const label = Object.keys(genderCounts)[elements[0].index];
+                            if(currentFilter.active && currentFilter.type === 'Gender' && currentFilter.value === label) resetFilters();
+                            else applyFilter('Gender', label);
+                        }
+                    }
+                }
+            });
+
+            // 3. HISTOGRAM (Vertical - Age)
+            const ctxHist = document.getElementById('histogramChart').getContext('2d');
+            const bins = { '20-29': 0, '30-39': 0, '40-49': 0, '50-59': 0, '60+': 0 };
+            data.forEach(r => {
+                const a = parseFloat(r.Age);
+                if(a) { if(a<30) bins['20-29']++; else if(a<40) bins['30-39']++; else if(a<50) bins['40-49']++; else if(a<60) bins['50-59']++; else bins['60+']++; }
+            });
+
+            if(charts.hist) charts.hist.destroy();
+            charts.hist = new Chart(ctxHist, {
+                type: 'bar',
+                data: { labels: Object.keys(bins), datasets: [{ label: 'Count', data: Object.values(bins), backgroundColor: '#f59e0b', borderRadius: 4 }] },
+                options: {
+                    ...baseOptions,
+                    layout: { padding: { top: 20 } }, // Padding for top labels
+                    scales: scalesCommon,
+                    plugins: {
+                        ...baseOptions.plugins,
+                        // SPECIFIC VERTICAL LABEL CONFIG
+                        datalabels: {
+                            color: '#1e293b',
+                            font: { weight: 'bold', size: 11 },
+                            anchor: 'end',    // Top of the bar
+                            align: 'end',     // Label aligns to its anchor (bottom of label touches top of bar)
+                            offset: -2        // Pull it slightly onto the bar or exactly on top
+                        }
+                    },
+                    onClick: (e, elements) => {
+                        if(elements.length > 0) {
+                            const label = Object.keys(bins)[elements[0].index];
+                            if(currentFilter.active && currentFilter.type === 'AgeRange' && currentFilter.value === label) resetFilters();
+                            else applyFilter('AgeRange', label);
+                        }
+                    }
+                }
+            });
+
+            // 4. LINE CHART
+            const ctxLine = document.getElementById('lineChart').getContext('2d');
+            const hireYears = {}, exitYears = {};
+            data.forEach(row => {
+                const parseDate = (dateVal) => {
+                    if(!dateVal) return null;
+                    let d = typeof dateVal === 'number' ? new Date(Math.round((dateVal - 25569)*86400*1000)) : new Date(dateVal);
+                    return isNaN(d) ? null : d.getFullYear();
+                };
+                const yHire = parseDate(row.HireDate);
+                const yExit = parseDate(row.ExitDate);
+                if(yHire) hireYears[yHire] = (hireYears[yHire] || 0) + 1;
+                if(yExit) exitYears[yExit] = (exitYears[yExit] || 0) + 1;
+            });
+            const labels = [...new Set([...Object.keys(hireYears), ...Object.keys(exitYears)])].sort();
+            
+            if(charts.line) charts.line.destroy();
+            charts.line = new Chart(ctxLine, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'Hires', data: labels.map(y => hireYears[y]||0), borderColor: '#10b981', tension: 0.4, borderWidth: 2, pointRadius: 3 },
+                        { label: 'Exits', data: labels.map(y => exitYears[y]||0), borderColor: '#ef4444', tension: 0.4, borderWidth: 2, pointRadius: 3 }
+                    ]
+                },
+                options: { 
+                    ...baseOptions, 
+                    plugins: { ...baseOptions.plugins, legend: { display: true, position: 'top', align: 'end' }, datalabels: { display: false } },
+                    scales: scalesCommon,
+                    interaction: { mode: 'index', intersect: false }
+                }
+            });
+
+            // 5. FINANCE CHART (Horizontal - Salary)
+            const ctxFin = document.getElementById('financeChart').getContext('2d');
+            const roleData = {};
+            data.forEach(r => {
+                const role = r.JobRole;
+                if(role) {
+                    if(!roleData[role]) roleData[role] = { sum: 0, count: 0 };
+                    roleData[role].sum += parseFloat(r.MonthlyIncome) || 0;
+                    roleData[role].count++;
+                }
+            });
+            // Sort by average salary
+            const sortedRoles = Object.keys(roleData).sort((a,b) => (roleData[a].sum/roleData[a].count) - (roleData[b].sum/roleData[b].count));
+            const labelsFin = sortedRoles;
+            const avgSalaries = labelsFin.map(role => Math.round(roleData[role].sum / roleData[role].count));
+
+            if(charts.fin) charts.fin.destroy();
+            charts.fin = new Chart(ctxFin, {
+                type: 'bar',
+                data: {
+                    labels: labelsFin,
+                    datasets: [{ label: 'Avg Salary', data: avgSalaries, backgroundColor: '#0d9488', borderRadius: 4, barThickness: 24 }]
+                },
+                options: { 
+                    ...baseOptions,
+                    indexAxis: 'y',
+                    layout: { padding: { right: 60, top: 10, bottom: 10 } }, // More right padding for currency text
+                    scales: scalesCommon,
+                    plugins: {
+                        ...baseOptions.plugins,
+                        datalabels: {
+                            color: '#0f766e',
+                            font: { weight: 'bold', size: 11 },
+                            anchor: 'end',    // Right side
+                            align: 'center',  // Vertically centered
+                            offset: 4,
+                            formatter: (val) => formatCurrency(val)
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderEmployeeTable(data) {
+            const tbody = document.getElementById('empTableBody');
+            tbody.innerHTML = '';
+            const displayData = data.slice(0, 100);
+            if(displayData.length === 0) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;">No records match filter.</td></tr>'; return; }
+            displayData.forEach(row => {
+                const tr = document.createElement('tr');
+                const status = String(row.Attrition).toLowerCase() === 'yes' ? '<span class="status-badge status-left">Left</span>' : '<span class="status-badge status-active">Active</span>';
+                tr.innerHTML = `<td>${row.EmployeeID}</td><td>${row.Age}</td><td>${row.Department}</td><td>${row.JobRole}</td><td>${row.Gender}</td><td>${formatCurrency(row.MonthlyIncome)}</td><td>${status}</td>`;
+                tbody.appendChild(tr);
+            });
+        }
+
+        document.getElementById('searchInput').addEventListener('keyup', function() {
+            const val = this.value.toLowerCase();
+            const rows = document.getElementById('empTableBody').getElementsByTagName('tr');
+            for (let i = 0; i < rows.length; i++) { rows[i].style.display = rows[i].textContent.toLowerCase().includes(val) ? '' : 'none'; }
+        });
+
+        document.getElementById('excelUpload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, {type: 'array'});
+                const jsonData = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                processData(jsonData);
+            };
+            reader.readAsArrayBuffer(file);
+        });
+    </script>
+</body>
+</html>
